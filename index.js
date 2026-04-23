@@ -1,20 +1,44 @@
+require("dotenv").config();
+
+const {
+  Client,
+  GatewayIntentBits,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  EmbedBuilder
+} = require("discord.js");
+
 const axios = require("axios");
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
+});
+
+// 🔐 TOKEN
+const TOKEN = process.env.TOKEN;
 
 // 📌 ID kanałów
 const LINK_CHANNEL_ID = "1495453163019567315";
 const QC_CHANNEL_ID = "1495795428698882109";
 
-// 🔒 blokada duplikatów
+// 🔒 cooldown tylko do link convertera
 const cooldown = new Set();
+
+client.on("clientReady", () => {
+  console.log(`✅ Bot działa jako ${client.user.tag}`);
+});
 
 client.on("messageCreate", async (message) => {
   try {
     if (message.author.bot) return;
 
-    const key = message.author.id + "_" + message.content;
-    if (cooldown.has(key)) return;
-    cooldown.add(key);
-    setTimeout(() => cooldown.delete(key), 4000);
+    console.log("MSG:", message.content);
+    console.log("CHANNEL:", message.channel.id);
 
     // 🔗 znajdź link
     const match = message.content.match(/https?:\/\/\S+/);
@@ -26,6 +50,13 @@ client.on("messageCreate", async (message) => {
     // 🔗 LINK CONVERTER
     // =========================
     if (message.channel.id === LINK_CHANNEL_ID) {
+
+      const key = message.author.id + "_" + message.content;
+      if (cooldown.has(key)) return;
+      cooldown.add(key);
+      setTimeout(() => cooldown.delete(key), 4000);
+
+      console.log("LINK CHANNEL TRIGGERED");
 
       // decode ACBUY
       if (url.includes("acbuy.com")) {
@@ -65,47 +96,64 @@ client.on("messageCreate", async (message) => {
     // =========================
     if (message.channel.id === QC_CHANNEL_ID) {
 
+      console.log("QC CHANNEL TRIGGERED");
+
+      if (!process.env.API_TOKEN) {
+        return message.reply("❌ Brak API_TOKEN w Railway");
+      }
+
       if (!/(taobao|weidian|1688)/i.test(url)) {
-        return message.reply("❌ Niepoprawny link do itemu");
+        return message.reply("❌ Niepoprawny link");
       }
 
-      const res = await axios.post(
-        "https://open.kakobuy.com/open/pic/qcImage",
-        {
-          token: process.env.API_TOKEN,
-          goodsUrl: url,
+      try {
+        console.log("Wysyłam request do API...");
+
+        const res = await axios.post(
+          "https://open.kakobuy.com/open/pic/qcImage",
+          {
+            token: process.env.API_TOKEN,
+            goodsUrl: url,
+          }
+        );
+
+        console.log("API RESPONSE:", res.data);
+
+        if (res.data.status !== "success") {
+          return message.reply("❌ " + res.data.message);
         }
-      );
 
-      if (res.data.status !== "success") {
-        return message.reply("❌ " + res.data.message);
-      }
+        const images = res.data.data;
 
-      const images = res.data.data;
+        if (!images.length) {
+          return message.reply("❌ Brak QC zdjęć");
+        }
 
-      if (!images.length) {
-        return message.reply("❌ Brak QC zdjęć");
-      }
+        // embed nagłówek
+        const embed = new EmbedBuilder()
+          .setColor("#2b2d31")
+          .setTitle("📸 QC Zdjęcia")
+          .setDescription(images[0].product_name);
 
-      // embed nagłówkowy
-      const header = new EmbedBuilder()
-        .setColor("#2b2d31")
-        .setTitle("📸 QC Zdjęcia")
-        .setDescription(images[0].product_name);
+        await message.reply({ embeds: [embed] });
 
-      await message.reply({ embeds: [header] });
+        // zdjęcia
+        for (const img of images) {
+          await message.channel.send({
+            content: `📅 ${img.qc_date}`,
+            files: [img.image_url],
+          });
+        }
 
-      // wysyłanie zdjęć
-      for (const img of images) {
-        await message.channel.send({
-          content: `📅 ${img.qc_date}`,
-          files: [img.image_url],
-        });
+      } catch (err) {
+        console.error("API ERROR:", err.response?.data || err.message);
+        message.reply("❌ Błąd API / brak QC");
       }
     }
 
   } catch (err) {
-    console.error(err);
-    message.reply("❌ Wystąpił błąd");
+    console.error("GLOBAL ERROR:", err);
   }
 });
+
+client.login(TOKEN);
