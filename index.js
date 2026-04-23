@@ -84,59 +84,45 @@ client.on("messageCreate", async (message) => {
     // =========================
     if (message.channel.id === QC_CHANNEL_ID) {
 
-      const idMatch = url.match(/itemID=(\d+)/);
+  const match = message.content.match(/https?:\/\/\S+/);
+  if (!match) return;
 
-      if (!idMatch) {
-        return message.reply("❌ Nie mogę znaleźć itemID");
-      }
+  const url = match[0];
 
-      const searchUrl = `https://qc.photos/?url=${encodeURIComponent(url)}`;
-
-      try {
-        const res = await axios.get(searchUrl, {
-  headers: {
-    "User-Agent": "Mozilla/5.0"
-  }
-});
-
-const $ = cheerio.load(res.data);
-const images = [];
-
-$("img[src]").each((i, el) => {
-  const src = $(el).attr("src");
-
-  if (
-    src &&
-    src.startsWith("http") &&
-    !src.includes("logo") &&
-    !src.includes("icon")
-  ) {
-    images.push(src);
-  }
-});
-
-        if (!images.length) {
-          return message.reply("❌ Nie znaleziono QC zdjęć");
+  try {
+    const res = await axios.post(
+      "https://open.kakobuy.com/open/pic/qcImage",
+      {
+        token: "TUTAJ_WKLEJ_TOKEN_OD_CHINKI",
+        goodsUrl: url
+      },
+      {
+        headers: {
+          "Content-Type": "application/json"
         }
-
-        await message.reply(`📸 Znaleziono ${images.length} zdjęć QC`);
-
-        // max 5 zdjęć
-        for (let i = 0; i < Math.min(images.length, 5); i++) {
-          await message.channel.send({
-            files: [images[i]],
-          });
-        }
-
-      } catch (err) {
-        console.error(err);
-        message.reply("❌ Błąd pobierania QC");
       }
+    );
+
+    if (res.data.status !== "success") {
+      return message.reply(`❌ API error: ${res.data.message}`);
+    }
+
+    const images = res.data.data.map(i => i.image_url);
+
+    if (!images.length) {
+      return message.reply("❌ Brak QC zdjęć");
+    }
+
+    await message.reply(`📸 Znaleziono ${images.length} zdjęć`);
+
+    for (let i = 0; i < Math.min(images.length, 5); i++) {
+      await message.channel.send({
+        files: [images[i]],
+      });
     }
 
   } catch (err) {
-    console.error("ERROR:", err);
+    console.error(err.response?.data || err.message);
+    message.reply("❌ Błąd API");
   }
-});
-
-client.login(TOKEN);
+}
