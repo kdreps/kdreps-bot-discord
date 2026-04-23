@@ -93,17 +93,32 @@ client.on("messageCreate", async (message) => {
       const searchUrl = `https://qc.photos/?url=${encodeURIComponent(url)}`;
 
       try {
-        const res = await axios.get(searchUrl);
-        const $ = cheerio.load(res.data);
+        const res = await axios.get(searchUrl, {
+  headers: {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  }
+});
+        const res = await axios.get(searchUrl, {
+  headers: {
+    "User-Agent": "Mozilla/5.0"
+  }
+});
 
-        const images = [];
+const $ = cheerio.load(res.data);
+const images = [];
 
-        $("img").each((i, el) => {
-          const src = $(el).attr("src");
-          if (src && src.startsWith("http")) {
-            images.push(src);
-          }
-        });
+$("img[src]").each((i, el) => {
+  const src = $(el).attr("src");
+
+  if (
+    src &&
+    src.startsWith("http") &&
+    !src.includes("logo") &&
+    !src.includes("icon")
+  ) {
+    images.push(src);
+  }
+});
 
         if (!images.length) {
           return message.reply("❌ Nie znaleziono QC zdjęć");
