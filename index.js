@@ -96,64 +96,41 @@ client.on("messageCreate", async (message) => {
     // =========================
     if (message.channel.id === QC_CHANNEL_ID) {
 
-      console.log("QC CHANNEL TRIGGERED");
+  console.log("QC CHANNEL TRIGGERED");
 
-      if (!process.env.API_TOKEN) {
-        return message.reply("❌ Brak API_TOKEN w Railway");
-      }
+  // wyciągnij itemID z weidian
+  const idMatch = url.match(/itemID=(\d+)/);
 
-      if (!/(taobao|weidian|1688)/i.test(url)) {
-        return message.reply("❌ Niepoprawny link");
-      }
-
-      try {
-        console.log("Wysyłam request do API...");
-
-        const res = await axios.post(
-          "https://open.kakobuy.com/open/pic/qcImage",
-          {
-            token: process.env.API_TOKEN,
-            goodsUrl: url,
-          }
-        );
-
-        console.log("API RESPONSE:", res.data);
-
-        if (res.data.status !== "success") {
-          return message.reply("❌ " + res.data.message);
-        }
-
-        const images = res.data.data;
-
-        if (!images.length) {
-          return message.reply("❌ Brak QC zdjęć");
-        }
-
-        // embed nagłówek
-        const embed = new EmbedBuilder()
-          .setColor("#2b2d31")
-          .setTitle("📸 QC Zdjęcia")
-          .setDescription(images[0].product_name);
-
-        await message.reply({ embeds: [embed] });
-
-        // zdjęcia
-        for (const img of images) {
-          await message.channel.send({
-            content: `📅 ${img.qc_date}`,
-            files: [img.image_url],
-          });
-        }
-
-      } catch (err) {
-        console.error("API ERROR:", err.response?.data || err.message);
-        message.reply("❌ Błąd API / brak QC");
-      }
-    }
-
-  } catch (err) {
-    console.error("GLOBAL ERROR:", err);
+  if (!idMatch) {
+    return message.reply("❌ Nie mogę znaleźć itemID w linku");
   }
-});
 
+  const itemID = idMatch[1];
+
+  // 🔗 linki do QC
+  const qcPhotos = `https://qc.photos/?url=${encodeURIComponent(url)}`;
+  const finds = `https://qcfinder.com/?url=${encodeURIComponent(url)}`;
+
+  const embed = new EmbedBuilder()
+    .setColor("#2b2d31")
+    .setTitle("📸 QC Finder")
+    .setDescription(`Item ID: **${itemID}**\nKliknij poniżej żeby zobaczyć QC`);
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setLabel("QC Photos")
+      .setStyle(ButtonStyle.Link)
+      .setURL(qcPhotos),
+    new ButtonBuilder()
+      .setLabel("QC Finder")
+      .setStyle(ButtonStyle.Link)
+      .setURL(finds)
+  );
+
+  return message.reply({
+    embeds: [embed],
+    components: [row],
+  });
+}
+    
 client.login(TOKEN);
