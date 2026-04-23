@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 const {
   Client,
   GatewayIntentBits,
@@ -8,7 +10,6 @@ const {
 } = require("discord.js");
 
 const axios = require("axios");
-const cheerio = require("cheerio");
 
 const client = new Client({
   intents: [
@@ -18,14 +19,11 @@ const client = new Client({
   ]
 });
 
-// 🔐 TOKEN (z Railway Variables)
 const TOKEN = process.env.TOKEN;
 
-// 📌 ID kanałów
 const LINK_CHANNEL_ID = "1495453163019567315";
 const QC_CHANNEL_ID = "1495795428698882109";
 
-// 🔒 cooldown
 const cooldown = new Set();
 
 client.on("clientReady", () => {
@@ -41,9 +39,7 @@ client.on("messageCreate", async (message) => {
 
     let url = match[0];
 
-    // =========================
-    // 🔗 LINK CONVERTER
-    // =========================
+    // ================= LINK CONVERTER =================
     if (message.channel.id === LINK_CHANNEL_ID) {
 
       const key = message.author.id + "_" + message.content;
@@ -56,7 +52,7 @@ client.on("messageCreate", async (message) => {
         if (inner) url = decodeURIComponent(inner[1]);
       }
 
-      if (!/(taobao|weidian|1688|usfans|acbuy|litbuy)/i.test(url)) return;
+      if (!/(taobao|weidian|1688)/i.test(url)) return;
 
       const kakobuy = `https://www.kakobuy.com/item/details?url=${encodeURIComponent(url)}&affcode=kdreps`;
 
@@ -79,50 +75,50 @@ client.on("messageCreate", async (message) => {
       });
     }
 
-    // =========================
-    // 📸 QC FINDER (SCRAPING)
-    // =========================
+    // ================= QC API =================
     if (message.channel.id === QC_CHANNEL_ID) {
 
-  const match = message.content.match(/https?:\/\/\S+/);
-  if (!match) return;
+      try {
+        const res = await axios.post(
+          "https://open.kakobuy.com/open/pic/qcImage",
+          {
+            token: process.env.QC_TOKEN,
+            goodsUrl: url
+          },
+          {
+            headers: {
+              "Content-Type": "application/json"
+            }
+          }
+        );
 
-  const url = match[0];
-
-  try {
-    const res = await axios.post(
-      "https://open.kakobuy.com/open/pic/qcImage",
-      {
-        token: "TUTAJ_WKLEJ_TOKEN_OD_CHINKI",
-        goodsUrl: url
-      },
-      {
-        headers: {
-          "Content-Type": "application/json"
+        if (res.data.status !== "success") {
+          return message.reply(`❌ API: ${res.data.message}`);
         }
+
+        const images = res.data.data.map(i => i.image_url);
+
+        if (!images.length) {
+          return message.reply("❌ Brak QC zdjęć");
+        }
+
+        await message.reply(`📸 Znaleziono ${images.length} zdjęć`);
+
+        for (let i = 0; i < Math.min(images.length, 5); i++) {
+          await message.channel.send({
+            files: [images[i]],
+          });
+        }
+
+      } catch (err) {
+        console.error(err.response?.data || err.message);
+        return message.reply("❌ Błąd API");
       }
-    );
-
-    if (res.data.status !== "success") {
-      return message.reply(`❌ API error: ${res.data.message}`);
-    }
-
-    const images = res.data.data.map(i => i.image_url);
-
-    if (!images.length) {
-      return message.reply("❌ Brak QC zdjęć");
-    }
-
-    await message.reply(`📸 Znaleziono ${images.length} zdjęć`);
-
-    for (let i = 0; i < Math.min(images.length, 5); i++) {
-      await message.channel.send({
-        files: [images[i]],
-      });
     }
 
   } catch (err) {
-    console.error(err.response?.data || err.message);
-    message.reply("❌ Błąd API");
+    console.error("ERROR:", err);
   }
-}
+});
+
+client.login(TOKEN);
