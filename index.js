@@ -127,10 +127,15 @@ client.on("messageCreate", async (message) => {
       .setURL(finds)
   );
 
-  return message.reply({
+    return message.reply({
     embeds: [embed],
     components: [row],
   });
 }
-    
+
+  } catch (err) {
+    console.error("ERROR:", err);
+  }
+});
+
 client.login(TOKEN);
